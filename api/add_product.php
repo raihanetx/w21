@@ -38,12 +38,20 @@ foreach ($products as $product) {
 }
 $new_product_data['id'] = $max_id + 1;
 
-// Basic sanitization
-foreach ($new_product_data as $key => $value) {
+// Basic sanitization, skipping longDescription to allow HTML
+foreach ($new_product_data as $key => &$value) {
+    if ($key === 'longDescription') {
+        // Allow HTML for long description, but consider a proper sanitizer like HTML Purifier in the future
+        continue;
+    }
     if (is_string($value)) {
-        $new_product_data[$key] = htmlspecialchars($value);
+        $value = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
     }
 }
+unset($value); // Unset reference
+
+// Ensure showStockOut is a boolean
+$new_product_data['showStockOut'] = !empty($new_product_data['showStockOut']);
 
 $products[] = $new_product_data;
 

@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - Think Plus BD</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --primary-color: #8F87F1;
@@ -217,6 +219,11 @@
                     <input type="number" id="product-stock">
                 </div>
                 <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="show-stock-out"> Show 'Stock Out' when empty
+                    </label>
+                </div>
+                <div class="form-group">
                     <label for="product-image">Image</label>
                     <input type="file" id="product-image-upload">
                     <input type="hidden" id="product-image-path">
@@ -293,6 +300,12 @@
         </header>
 
         <main class="container">
+            <section id="analytics-section" style="margin-bottom: 3rem;">
+                <h2>Sales & Order Analytics</h2>
+                <div style="width: 100%; max-width: 900px; margin: auto; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <canvas id="salesChart"></canvas>
+                </div>
+            </section>
             <section id="orders-section">
                 <h2>Order Management</h2>
                 <div class="dashboard-controls">
@@ -469,6 +482,22 @@
             if (sessionStorage.getItem('isAdminAuthenticated') === 'true') {
                 document.getElementById('login-container').style.display = 'none';
                 document.getElementById('dashboard-content').style.display = 'block';
+
+                tinymce.init({
+                    selector: 'textarea#product-long-description',
+                    plugins: 'lists link image table code help wordcount',
+                    toolbar: 'undo redo | blocks | bold italic | alignleft aligncenter alignright | indent outdent | bullist numlist | code | table'
+                });
+
+                document.getElementById('product-description').addEventListener('input', function() {
+                    const lines = this.value.split('\n');
+                    if (lines.length > 3) {
+                        alert('Short description cannot exceed 3 lines.');
+                        this.value = lines.slice(0, 3).join('\n');
+                    }
+                });
+
+                fetchAndRenderSalesChart();
                 fetchOrders();
                 fetchCategories();
                 fetchProducts();
@@ -836,10 +865,11 @@
                     document.getElementById('product-id').value = product.id;
                     document.getElementById('product-name').value = product.name;
                     document.getElementById('product-description').value = product.description;
-                    document.getElementById('product-long-description').value = product.longDescription;
+                    tinymce.get('product-long-description').setContent(product.longDescription || '');
                     document.getElementById('product-category').value = product.category;
                     document.getElementById('product-price').value = product.price;
                     document.getElementById('product-stock').value = product.stock;
+                    document.getElementById('show-stock-out').checked = product.showStockOut || false;
                     document.getElementById('product-is-featured').checked = product.isFeatured;
                     document.getElementById('product-image-path').value = product.image;
                     document.getElementById('current-image').src = product.image ? `../${product.image}` : '';
@@ -851,6 +881,7 @@
                 title.textContent = 'Add Product';
                 document.getElementById('product-id').value = '';
                 document.getElementById('current-image').src = '';
+                tinymce.get('product-long-description').setContent('');
             }
 
             // Populate category dropdown
@@ -916,10 +947,11 @@
                 id: id ? parseInt(id) : null,
                 name: document.getElementById('product-name').value,
                 description: document.getElementById('product-description').value,
-                longDescription: document.getElementById('product-long-description').value,
+                longDescription: tinymce.get('product-long-description').getContent(),
                 category: document.getElementById('product-category').value,
                 price: parseFloat(document.getElementById('product-price').value),
                 stock: parseInt(document.getElementById('product-stock').value),
+                showStockOut: document.getElementById('show-stock-out').checked,
                 isFeatured: document.getElementById('product-is-featured').checked,
                 image: document.getElementById('product-image-path').value,
                 durations: Array.from(document.querySelectorAll('#durations-container .duration-item')).map(item => ({
@@ -1135,6 +1167,18 @@
                     return `<div>${item.name}${duration} x ${item.quantity}</div>`;
                 }).join('');
 
+                let totalHtml = `<strong>৳${parseFloat(order.totalAmount).toFixed(2)}</strong>`;
+                if (order.coupon_code && parseFloat(order.discount) > 0) {
+                    totalHtml = `
+                        <div style="text-align: right;">
+                            Sub: ৳${parseFloat(order.subtotal).toFixed(2)}<br>
+                            <span style="color: #e74c3c;">Disc: -৳${parseFloat(order.discount).toFixed(2)}</span><br>
+                            <small>(${order.coupon_code})</small><hr style="margin: 4px 0;">
+                            <strong>Total: ৳${parseFloat(order.totalAmount).toFixed(2)}</strong>
+                        </div>
+                    `;
+                }
+
                 const receivedAt = new Date(order.received_at).toLocaleString('en-GB');
 
                 const row = document.createElement('tr');
@@ -1143,7 +1187,7 @@
                     <td>${order.customer.name}</td>
                     <td>${order.customer.email}<br>${order.customer.phone}</td>
                     <td>${itemsHtml}</td>
-                    <td>৳${parseFloat(order.totalAmount).toFixed(2)}</td>
+                    <td>${totalHtml}</td>
                     <td>
                         <select class="status-select" data-order-id="${order.id}">
                             <option value="Pending" ${order.status === 'Pending' ? 'selected' : ''}>Pending</option>
@@ -1185,6 +1229,50 @@
                 console.error('Error updating status:', error);
                 alert('An error occurred while updating the status.');
                 fetchOrders(); // Re-fetch to revert the change in the UI
+            }
+        }
+
+        async function fetchAndRenderSalesChart() {
+            try {
+                const response = await fetch('api/get_analytics_data.php?t=' + new Date().getTime());
+                const data = await response.json();
+
+                if (!data.success) {
+                    console.error('Failed to fetch analytics data:', data.message);
+                    return;
+                }
+
+                const ctx = document.getElementById('salesChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.labels,
+                        datasets: data.datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            title: {
+                                display: true,
+                                text: 'Order Status Trends'
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching or rendering chart:', error);
             }
         }
 

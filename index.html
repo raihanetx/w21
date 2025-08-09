@@ -531,7 +531,7 @@ src="https://www.facebook.com/tr?id=482675157669768&ev=PageView&noscript=1"
             -webkit-box-orient: vertical;
         }
 
-        .product-card p.description { font-size: 0.85rem; color: #555555; line-height: 1.4em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: pre-line; }
+        .product-card p.description { font-size: 0.85rem; color: #555555; line-height: 1.4em; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; white-space: pre-line; }
         .product-card-duration { font-size: 0.8em; color: #555; }
         .price { color: var(--primary-color); font-weight: 700; font-size: 1.1rem; }
         .duration-selector { margin-bottom: 1rem; display: none; }
@@ -2901,11 +2901,20 @@ src="https://www.facebook.com/tr?id=482675157669768&ev=PageView&noscript=1"
                 if (currentPage === 'home') { displayActualContent(); }
                 if (domElements.pages.products.classList.contains('active')) { filterProducts(currentNavigationContext?.id || 'all', currentNavigationContext?.searchTerm); }
             } catch (error) {
-                console.error("Could not load products:", error); allProductsData = []; showToast('Error loading products.', 'error critical');
+                console.error("Could not load products:", error);
+                allProductsData = [];
+                showToast('Error loading products. Please try again later.', 'error', 5000);
                 const gridsToClearOnError = [ domElements.featuredCoursesGrid, domElements.popularSubscriptionsGrid, domElements.topSoftwareGrid, domElements.latestEbooksGrid, domElements.allProductsGrid ];
-                gridsToClearOnError.forEach(grid => { if(grid) removeSkeletonCards(grid); });
-                allProductsData = generateDemoProducts().map(p => ({...p, slug: createSlug(p.name)})); // Fallback
-                if (currentPage === 'home') { displayActualContent(); }
+                gridsToClearOnError.forEach(grid => {
+                    if(grid) {
+                        removeSkeletonCards(grid);
+                        grid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: #999;">Could not load products.</p>';
+                    }
+                });
+                if (domElements.noProductsMessage) {
+                    domElements.noProductsMessage.textContent = 'Could not load products.';
+                    domElements.noProductsMessage.style.display = 'block';
+                }
             } finally { isLoadingProducts = false; if (initialLoadPending) initialLoadPending = false; }
         }
 
@@ -3205,7 +3214,7 @@ src="https://www.facebook.com/tr?id=482675157669768&ev=PageView&noscript=1"
             const skeletonDiv = document.createElement('div'); skeletonDiv.className = 'skeleton'; imageContainer.appendChild(skeletonDiv);
             const placeholderTextSpan = document.createElement('span'); placeholderTextSpan.className = 'image-placeholder-text'; placeholderTextSpan.style.display = 'none'; placeholderTextSpan.textContent = `Image for ${product.name}`; imageContainer.appendChild(placeholderTextSpan);
             if (product.image && product.image !== 'path/to/default-product-image.jpg') { const img = document.createElement('img'); img.src = product.image; img.alt = product.name; img.className = 'image-fade-in'; imageContainer.appendChild(img); setupSingleImageLoading(img); } else { skeletonDiv.style.display = 'none'; placeholderTextSpan.style.display = 'block'; }
-            if (product.stock > 0) {
+            if (product.stock === 0 && product.showStockOut) {
                 const stockBadge = document.createElement('div');
                 stockBadge.className = 'stock-badge';
                 stockBadge.textContent = 'Stock Out';
@@ -3408,7 +3417,7 @@ function renderReviews(product) {
             </div>
             <div id="descriptionTab" class="tab-content" style="display:block;">
                 <div class="expandable-content">
-                    <p>${(product.longDescription || product.description || 'An exceptional digital product.').trim()}</p>
+                    ${(product.longDescription || `<p>${product.description}</p>` || '<p>An exceptional digital product.</p>').trim()}
                 </div>
                 <button class="see-more-btn" onclick="toggleSeeMore(this, false)">Show More</button>
                 <button class="see-less-btn" onclick="toggleSeeMore(this, true)">See Less</button>

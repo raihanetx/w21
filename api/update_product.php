@@ -37,10 +37,21 @@ if (json_last_error() !== JSON_ERROR_NONE) {
 $product_found = false;
 foreach ($products as $key => $product) {
     if ($product['id'] == $product_id) {
-        // Update all fields provided in the request
-        foreach ($update_data as $update_key => $update_value) {
+        // Ensure showStockOut is a boolean before merging
+        $update_data['showStockOut'] = !empty($update_data['showStockOut']);
+
+        // Update all fields provided in the request, sanitizing them
+        foreach ($update_data as $update_key => &$update_value) {
+            if ($update_key === 'longDescription') {
+                // Allow HTML, no sanitization for this field
+            } elseif (is_string($update_value)) {
+                $update_value = htmlspecialchars($update_value, ENT_QUOTES, 'UTF-8');
+            }
+            // For other types like numbers, booleans, arrays (durations, reviews), we trust the structure from the client
             $products[$key][$update_key] = $update_value;
         }
+        unset($update_value); // Unset reference
+
         $product_found = true;
         break;
     }
