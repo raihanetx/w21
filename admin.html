@@ -6,6 +6,7 @@
     <title>Admin Dashboard - Think Plus BD</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --primary-color: #8F87F1;
@@ -299,6 +300,12 @@
         </header>
 
         <main class="container">
+            <section id="analytics-section" style="margin-bottom: 3rem;">
+                <h2>Sales & Order Analytics</h2>
+                <div style="width: 100%; max-width: 900px; margin: auto; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <canvas id="salesChart"></canvas>
+                </div>
+            </section>
             <section id="orders-section">
                 <h2>Order Management</h2>
                 <div class="dashboard-controls">
@@ -490,6 +497,7 @@
                     }
                 });
 
+                fetchAndRenderSalesChart();
                 fetchOrders();
                 fetchCategories();
                 fetchProducts();
@@ -1221,6 +1229,50 @@
                 console.error('Error updating status:', error);
                 alert('An error occurred while updating the status.');
                 fetchOrders(); // Re-fetch to revert the change in the UI
+            }
+        }
+
+        async function fetchAndRenderSalesChart() {
+            try {
+                const response = await fetch('api/get_analytics_data.php?t=' + new Date().getTime());
+                const data = await response.json();
+
+                if (!data.success) {
+                    console.error('Failed to fetch analytics data:', data.message);
+                    return;
+                }
+
+                const ctx = document.getElementById('salesChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.labels,
+                        datasets: data.datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            title: {
+                                display: true,
+                                text: 'Order Status Trends'
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching or rendering chart:', error);
             }
         }
 
