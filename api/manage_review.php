@@ -56,6 +56,14 @@ foreach ($products as $product_key => &$product) {
                         case 'unfeature':
                             $review['featured'] = false;
                             break;
+                        case 'edit':
+                            if (isset($request_data['text'])) {
+                                $review['text'] = htmlspecialchars($request_data['text']);
+                            }
+                            if (isset($request_data['rating'])) {
+                                $review['rating'] = intval($request_data['rating']);
+                            }
+                            break;
                         default:
                             http_response_code(400);
                             echo json_encode(['success' => false, 'message' => 'Invalid action.']);
