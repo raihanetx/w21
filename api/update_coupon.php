@@ -28,15 +28,14 @@ if (!file_exists($coupons_file)) {
 $file_content = file_get_contents($coupons_file);
 $coupons = json_decode($file_content, true);
 
-if (json_last_error() !== JSON_ERROR_NONE) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Error reading coupons file.']);
-    exit;
+// Ensure coupons is an array
+if (!is_array($coupons)) {
+    $coupons = [];
 }
 
 $coupon_found = false;
 foreach ($coupons as $key => $coupon) {
-    if ($coupon['id'] == $coupon_id) {
+    if (isset($coupon['id']) && $coupon['id'] == $coupon_id) {
         // Update all fields provided in the request
         foreach ($update_data as $update_key => $update_value) {
             $coupons[$key][$update_key] = $update_value;

@@ -23,18 +23,18 @@ if (file_exists($coupons_file)) {
     $file_content = file_get_contents($coupons_file);
     if (!empty($file_content)) {
         $coupons = json_decode($file_content, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'Error reading existing coupons file.']);
-            exit;
-        }
     }
+}
+
+// Ensure coupons is an array
+if (!is_array($coupons)) {
+    $coupons = [];
 }
 
 // Generate a new ID
 $max_id = 0;
 foreach ($coupons as $coupon) {
-    if ($coupon['id'] > $max_id) {
+    if (isset($coupon['id']) && $coupon['id'] > $max_id) {
         $max_id = $coupon['id'];
     }
 }
@@ -42,7 +42,8 @@ $new_coupon_data['id'] = $max_id + 1;
 
 // Add created_at timestamp and initialize times_used
 $new_coupon_data['created_at'] = date('Y-m-d H:i:s');
-$new_coupon_data['times_used'] = 0;
+$new_coupon_data['times_used'] = isset($new_coupon_data['times_used']) ? $new_coupon_data['times_used'] : 0;
+
 
 $coupons[] = $new_coupon_data;
 
