@@ -27,14 +27,14 @@ if (!file_exists($coupons_file)) {
 $file_content = file_get_contents($coupons_file);
 $coupons = json_decode($file_content, true);
 
-if (json_last_error() !== JSON_ERROR_NONE || $coupons === null) {
-    echo json_encode(['success' => false, 'message' => 'Invalid coupon code.']);
-    exit;
+// Ensure coupons is an array
+if (!is_array($coupons)) {
+    $coupons = [];
 }
 
 $coupon_found = null;
 foreach ($coupons as $coupon) {
-    if (strtoupper($coupon['code']) === $coupon_code) {
+    if (isset($coupon['code']) && strtoupper($coupon['code']) === $coupon_code) {
         $coupon_found = $coupon;
         break;
     }

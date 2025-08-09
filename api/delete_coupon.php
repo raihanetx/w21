@@ -28,16 +28,15 @@ if (!file_exists($coupons_file)) {
 $file_content = file_get_contents($coupons_file);
 $coupons = json_decode($file_content, true);
 
-if (json_last_error() !== JSON_ERROR_NONE) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Error reading coupons file.']);
-    exit;
+// Ensure coupons is an array
+if (!is_array($coupons)) {
+    $coupons = [];
 }
 
 $coupon_found = false;
 $updated_coupons = [];
 foreach ($coupons as $coupon) {
-    if ($coupon['id'] == $coupon_id) {
+    if (isset($coupon['id']) && $coupon['id'] == $coupon_id) {
         $coupon_found = true;
     } else {
         $updated_coupons[] = $coupon;
@@ -50,7 +49,7 @@ if (!$coupon_found) {
     exit;
 }
 
-$json_to_save = json_encode($updated_coupons, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+$json_to_save = json_encode(array_values($updated_coupons), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 
 if (file_put_contents($coupons_file, $json_to_save)) {
     echo json_encode(['success' => true, 'message' => 'Coupon deleted successfully.']);
