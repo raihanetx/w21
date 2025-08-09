@@ -1135,6 +1135,18 @@
                     return `<div>${item.name}${duration} x ${item.quantity}</div>`;
                 }).join('');
 
+                let totalHtml = `<strong>৳${parseFloat(order.totalAmount).toFixed(2)}</strong>`;
+                if (order.coupon_code && parseFloat(order.discount) > 0) {
+                    totalHtml = `
+                        <div style="text-align: right;">
+                            Sub: ৳${parseFloat(order.subtotal).toFixed(2)}<br>
+                            <span style="color: #e74c3c;">Disc: -৳${parseFloat(order.discount).toFixed(2)}</span><br>
+                            <small>(${order.coupon_code})</small><hr style="margin: 4px 0;">
+                            <strong>Total: ৳${parseFloat(order.totalAmount).toFixed(2)}</strong>
+                        </div>
+                    `;
+                }
+
                 const receivedAt = new Date(order.received_at).toLocaleString('en-GB');
 
                 const row = document.createElement('tr');
@@ -1143,7 +1155,7 @@
                     <td>${order.customer.name}</td>
                     <td>${order.customer.email}<br>${order.customer.phone}</td>
                     <td>${itemsHtml}</td>
-                    <td>৳${parseFloat(order.totalAmount).toFixed(2)}</td>
+                    <td>${totalHtml}</td>
                     <td>
                         <select class="status-select" data-order-id="${order.id}">
                             <option value="Pending" ${order.status === 'Pending' ? 'selected' : ''}>Pending</option>
