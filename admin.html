@@ -232,6 +232,40 @@
         </div>
     </div>
 
+    <div id="coupon-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeCouponModal()">&times;</span>
+            <h2 id="coupon-modal-title">Add Coupon</h2>
+            <form id="coupon-form">
+                <input type="hidden" id="coupon-id">
+                <div class="form-group">
+                    <label for="coupon-code">Coupon Code</label>
+                    <input type="text" id="coupon-code" required>
+                </div>
+                <div class="form-group">
+                    <label for="coupon-discount-type">Discount Type</label>
+                    <select id="coupon-discount-type">
+                        <option value="percentage">Percentage</option>
+                        <option value="fixed">Fixed Amount</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="coupon-discount-value">Discount Value</label>
+                    <input type="number" id="coupon-discount-value" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="coupon-usage-limit">Usage Limit (0 for unlimited)</label>
+                    <input type="number" id="coupon-usage-limit" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="coupon-expiry-date">Expiry Date (optional)</label>
+                    <input type="date" id="coupon-expiry-date">
+                </div>
+                <button type="submit" class="btn">Save Coupon</button>
+            </form>
+        </div>
+    </div>
+
     <div id="dashboard-content" style="display: none;">
         <header class="header">
             <h1>Admin Dashboard</h1>
@@ -317,6 +351,32 @@
                 </div>
                 <div id="product-loader" class="loader" style="display:none;">Loading products...</div>
             </section>
+
+            <section id="coupon-section" style="margin-top: 3rem;">
+                <h2>Coupon Management</h2>
+                <div class="dashboard-controls">
+                    <button class="btn" onclick="showCouponModal()">Add New Coupon</button>
+                </div>
+                <div id="coupons-container" style="margin-top: 2rem;">
+                     <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Code</th>
+                                <th>Type</th>
+                                <th>Value</th>
+                                <th>Usage</th>
+                                <th>Expires</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="coupons-tbody">
+                            <!-- Coupons will be dynamically inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="coupon-loader" class="loader" style="display:none;">Loading coupons...</div>
+            </section>
         </main>
     </div>
 
@@ -341,6 +401,7 @@
         }
 
         let allProductsData = [];
+        let allCouponsData = [];
 
         function checkAuth() {
             if (sessionStorage.getItem('isAdminAuthenticated') === 'true') {
@@ -349,6 +410,146 @@
                 fetchOrders();
                 fetchCategories();
                 fetchProducts();
+                fetchCoupons();
+            }
+        }
+
+        async function fetchCoupons() {
+            const tbody = document.getElementById('coupons-tbody');
+            const loader = document.getElementById('coupon-loader');
+            tbody.innerHTML = '';
+            loader.style.display = 'block';
+
+            try {
+                const response = await fetch('api/get_coupons.php?t=' + new Date().getTime());
+                const coupons = await response.json();
+                allCouponsData = coupons;
+                renderCoupons(coupons);
+            } catch (error) {
+                console.error('Error fetching coupons:', error);
+                tbody.innerHTML = `<tr><td colspan="7">Failed to fetch coupons.</td></tr>`;
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+        function renderCoupons(coupons) {
+            const tbody = document.getElementById('coupons-tbody');
+            tbody.innerHTML = '';
+
+            if (coupons.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">No coupons found.</td></tr>`;
+                return;
+            }
+
+            coupons.forEach(c => {
+                const row = document.createElement('tr');
+                const usage = c.usage_limit > 0 ? `${c.times_used || 0} / ${c.usage_limit}` : 'Unlimited';
+                row.innerHTML = `
+                    <td>${c.id}</td>
+                    <td>${c.code}</td>
+                    <td>${c.discount_type}</td>
+                    <td>${c.discount_value}${c.discount_type === 'percentage' ? '%' : ''}</td>
+                    <td>${usage}</td>
+                    <td>${c.expiry_date || 'N/A'}</td>
+                    <td>
+                        <button class="btn" onclick="showCouponModal(${c.id})">Edit</button>
+                        <button class="btn" onclick="deleteCoupon(${c.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function showCouponModal(couponId = null) {
+            const modal = document.getElementById('coupon-modal');
+            const title = document.getElementById('coupon-modal-title');
+            const form = document.getElementById('coupon-form');
+            form.reset();
+
+            if (couponId) {
+                title.textContent = 'Edit Coupon';
+                const coupon = allCouponsData.find(c => c.id == couponId);
+                if (coupon) {
+                    document.getElementById('coupon-id').value = coupon.id;
+                    document.getElementById('coupon-code').value = coupon.code;
+                    document.getElementById('coupon-discount-type').value = coupon.discount_type;
+                    document.getElementById('coupon-discount-value').value = coupon.discount_value;
+                    document.getElementById('coupon-usage-limit').value = coupon.usage_limit;
+                    document.getElementById('coupon-expiry-date').value = coupon.expiry_date;
+                }
+            } else {
+                title.textContent = 'Add Coupon';
+                document.getElementById('coupon-id').value = '';
+            }
+            modal.style.display = 'block';
+        }
+
+        function closeCouponModal() {
+            document.getElementById('coupon-modal').style.display = 'none';
+        }
+
+        document.getElementById('coupon-form').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            saveCoupon();
+        });
+
+        async function saveCoupon() {
+            const id = document.getElementById('coupon-id').value;
+            const couponData = {
+                id: id ? parseInt(id) : null,
+                code: document.getElementById('coupon-code').value.toUpperCase(),
+                discount_type: document.getElementById('coupon-discount-type').value,
+                discount_value: parseFloat(document.getElementById('coupon-discount-value').value),
+                usage_limit: parseInt(document.getElementById('coupon-usage-limit').value),
+                expiry_date: document.getElementById('coupon-expiry-date').value,
+            };
+
+            if (!id) { // Only set these for new coupons
+                couponData.times_used = 0;
+                couponData.created_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            }
+
+
+            const url = id ? 'api/update_coupon.php' : 'api/add_coupon.php';
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(couponData)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Coupon saved!');
+                    closeCouponModal();
+                    fetchCoupons();
+                } else {
+                    alert(`Error: ${result.message}`);
+                }
+            } catch (error) {
+                alert('An error occurred while saving the coupon.');
+            }
+        }
+
+        async function deleteCoupon(id) {
+            if (!confirm('Are you sure you want to delete this coupon?')) {
+                return;
+            }
+            try {
+                const response = await fetch('api/delete_coupon.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert('Coupon deleted!');
+                    fetchCoupons();
+                } else {
+                    alert(`Error: ${result.message}`);
+                }
+            } catch (error) {
+                alert('An error occurred while deleting the coupon.');
             }
         }
 
