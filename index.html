@@ -2892,7 +2892,7 @@ src="https://www.facebook.com/tr?id=482675157669768&ev=PageView&noscript=1"
             if (isLoadingProducts || (allProductsData.length > 0 && !forceRefresh && !initialLoadPending)) { return; }
             isLoadingProducts = true;
             try {
-                const response = await fetch('api/get_products.php?t=' + new Date().getTime());
+                const response = await fetch('api/get_products.php?view=public&t=' + new Date().getTime());
                 const products = await response.json();
                 allProductsData = products.map(p => ({...p, slug: createSlug(p.name)}));
 
@@ -3296,24 +3296,25 @@ function renderReviews(product) {
     reviewsTab.insertAdjacentHTML('beforeend', reviewInputHTML);
 
     if (!product.reviews || product.reviews.length === 0) {
-        reviewsTab.insertAdjacentHTML('beforeend', '<p style="padding: 1rem 0; text-align: center; color: #777;">There are no reviews for this product yet. Be the first to write one!</p>');
+        reviewsTab.insertAdjacentHTML('beforeend', '<p style="padding: 1rem 0; text-align: center; color: #777;">There are no approved reviews for this product yet. Be the first to write one!</p>');
         return;
     }
 
     const reviewsContainer = document.createElement('div');
     reviewsContainer.className = 'reviews-list';
 
-    const reviewsToShow = 3;
-    const allReviews = product.reviews;
+    // Separate featured reviews and sort them by date
+    const featuredReviews = product.reviews.filter(r => r.featured).sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Filter non-featured reviews and sort them by date
+    const otherReviews = product.reviews.filter(r => !r.featured).sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    // Sort reviews by date, newest first
-    allReviews.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const allSortedReviews = [...featuredReviews, ...otherReviews];
 
-    allReviews.forEach((review, index) => {
+    allSortedReviews.forEach(review => {
         const reviewElement = document.createElement('div');
         reviewElement.className = 'review-item';
-        if (index >= reviewsToShow) {
-            reviewElement.style.display = 'none';
+        if (review.featured) {
+            reviewElement.style.border = '2px solid var(--primary-color)';
         }
 
         const authorInitials = review.author.split(' ').map(n => n[0]).join('').toUpperCase();
@@ -3327,6 +3328,7 @@ function renderReviews(product) {
 
         reviewElement.innerHTML = `
             <div class="review-header">
+                ${review.featured ? '<i class="fas fa-thumbtack" style="color: var(--primary-color); position: absolute; top: 10px; right: 10px;" title="Featured Review"></i>' : ''}
                 <div class="review-avatar-wrapper">${avatarHTML}</div>
                 <div class="review-author-details">
                     <span class="review-author">${review.author}</span>
@@ -3342,21 +3344,6 @@ function renderReviews(product) {
     });
 
     reviewsTab.appendChild(reviewsContainer);
-
-    if (allReviews.length > reviewsToShow) {
-        const seeMoreBtn = document.createElement('button');
-        seeMoreBtn.className = 'see-more-reviews-btn';
-        seeMoreBtn.textContent = `See All ${allReviews.length} Reviews`;
-        seeMoreBtn.onclick = function(e) {
-            e.preventDefault();
-            const hiddenReviews = reviewsContainer.querySelectorAll('.review-item[style*="display: none"]');
-            hiddenReviews.forEach(review => {
-                review.style.display = 'block';
-            });
-            seeMoreBtn.style.display = 'none';
-        };
-        reviewsTab.appendChild(seeMoreBtn);
-    }
 }
 
         function showProductDetail(productId) {
@@ -3811,7 +3798,7 @@ function toggleSeeMore(btn, seeLess) {
             }
         }
 
-        function submitReview() {
+        async function submitReview() {
             const modal = document.getElementById('review-modal');
             if (!modal) return;
 
@@ -3826,46 +3813,38 @@ function toggleSeeMore(btn, seeLess) {
             }
 
             const rating = parseInt(ratingInput.value, 10);
-            const productIndex = allProductsData.findIndex(p => p.id === productId);
 
-            if (productIndex === -1) {
-                showToast('Could not submit review. Product not found.', 'error');
-                return;
-            }
-
-            const product = allProductsData[productIndex];
-
-            const newReview = {
-                id: Date.now(),
+            const reviewData = {
+                productId: productId,
                 author: name,
-                date: new Date().toISOString().split('T')[0],
                 rating: rating,
-                text: reviewText,
-                avatar: null
+                text: reviewText
             };
 
-            if (!product.reviews) {
-                product.reviews = [];
+            try {
+                const response = await fetch('api/add_review.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reviewData)
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast('Thank you! Your review has been submitted for approval.', 'success');
+                } else {
+                    showToast(`Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showToast('An error occurred while submitting your review.', 'error');
+            } finally {
+                closeReviewModal();
+                // Reset form fields
+                document.getElementById('review-name').value = '';
+                document.getElementById('review-text').value = '';
+                const checkedRating = document.querySelector('input[name="rating"]:checked');
+                if (checkedRating) checkedRating.checked = false;
+                document.querySelectorAll("#star-rating label").forEach(l => l.classList.remove("selected"));
             }
-
-            product.reviews.unshift(newReview);
-
-            renderReviews(product);
-
-            const reviewTabButton = document.querySelector('.tab-link[onclick*="reviewsTab"]');
-            if(reviewTabButton) {
-                reviewTabButton.textContent = `Reviews (${product.reviews.length})`;
-            }
-
-            showToast('Thank you! Your review has been submitted.', 'success');
-            closeReviewModal();
-
-            // Reset form fields
-            document.getElementById('review-name').value = '';
-            document.getElementById('review-text').value = '';
-            const checkedRating = document.querySelector('input[name="rating"]:checked');
-            if (checkedRating) checkedRating.checked = false;
-            document.querySelectorAll("#star-rating label").forEach(l => l.classList.remove("selected"));
         }
 
         document.addEventListener('DOMContentLoaded', () => {
