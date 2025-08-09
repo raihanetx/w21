@@ -2901,11 +2901,20 @@ src="https://www.facebook.com/tr?id=482675157669768&ev=PageView&noscript=1"
                 if (currentPage === 'home') { displayActualContent(); }
                 if (domElements.pages.products.classList.contains('active')) { filterProducts(currentNavigationContext?.id || 'all', currentNavigationContext?.searchTerm); }
             } catch (error) {
-                console.error("Could not load products:", error); allProductsData = []; showToast('Error loading products.', 'error critical');
+                console.error("Could not load products:", error);
+                allProductsData = [];
+                showToast('Error loading products. Please try again later.', 'error', 5000);
                 const gridsToClearOnError = [ domElements.featuredCoursesGrid, domElements.popularSubscriptionsGrid, domElements.topSoftwareGrid, domElements.latestEbooksGrid, domElements.allProductsGrid ];
-                gridsToClearOnError.forEach(grid => { if(grid) removeSkeletonCards(grid); });
-                allProductsData = generateDemoProducts().map(p => ({...p, slug: createSlug(p.name)})); // Fallback
-                if (currentPage === 'home') { displayActualContent(); }
+                gridsToClearOnError.forEach(grid => {
+                    if(grid) {
+                        removeSkeletonCards(grid);
+                        grid.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: #999;">Could not load products.</p>';
+                    }
+                });
+                if (domElements.noProductsMessage) {
+                    domElements.noProductsMessage.textContent = 'Could not load products.';
+                    domElements.noProductsMessage.style.display = 'block';
+                }
             } finally { isLoadingProducts = false; if (initialLoadPending) initialLoadPending = false; }
         }
 
