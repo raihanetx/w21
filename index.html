@@ -2162,6 +2162,14 @@ src="https://www.facebook.com/tr?id=482675157669768&ev=PageView&noscript=1"
                             <div id="orderItemsCheckout" class="summary-items">
                                 <p>Your cart is empty. Please add items to proceed.</p>
                             </div>
+                            <div id="subtotal-row" class="summary-item" style="display: none;">
+                                <span>Subtotal:</span>
+                                <span id="orderSubtotalCheckout"></span>
+                            </div>
+                            <div id="discount-row" class="summary-item" style="display: none; color: #27ae60; font-weight: 500;">
+                                <span>Discount:</span>
+                                <span id="orderDiscountCheckout"></span>
+                            </div>
                             <div class="summary-total">
                                 <span class="summary-total-label">Total Amount:</span>
                                 <span class="summary-total-value" id="orderTotalCheckout">৳0.00</span>
@@ -2472,6 +2480,7 @@ src="https://www.facebook.com/tr?id=482675157669768&ev=PageView&noscript=1"
         let orders = [];
         let currentFilteredProducts = [];
         let isLoadingProducts = false;
+        let appliedCoupon = null;
 
         const domElements = {
             cartCount: document.getElementById('cartCount'),
@@ -3021,6 +3030,12 @@ src="https://www.facebook.com/tr?id=482675157669768&ev=PageView&noscript=1"
             if (domElements.mobileBoxSearchButton && domElements.mobileSearchInput) { domElements.mobileBoxSearchButton.addEventListener('click', () => { handleSearch(domElements.mobileSearchInput.value); }); }
             if (domElements.mobileSearchInput) { domElements.mobileSearchInput.addEventListener('keypress', function(event) { if (event.key === 'Enter') { event.preventDefault(); handleSearch(this.value); this.blur(); } }); }
             if (domElements.checkoutForm) { domElements.checkoutForm.addEventListener('submit', (event) => { event.preventDefault(); placeOrder(); }); }
+
+            const applyCouponBtn = document.querySelector('.apply-coupon-btn');
+            if(applyCouponBtn) {
+                applyCouponBtn.addEventListener('click', applyCoupon);
+            }
+
             setupEnglishCheckoutForm();
             setupImageLoading();
             setupCategorySlider();
@@ -3562,15 +3577,101 @@ function toggleSeeMore(btn, seeLess) {
         function handleProductCardBuyNow(productId) { const product = getProductById(productId); if (product) { const productForCart = { ...product }; if (product.category === 'subscription' && Array.isArray(product.durations) && product.durations.length > 0) { productForCart.price = parseFloat(product.durations[0].price); productForCart.selectedDurationLabel = product.durations[0].label; } else { productForCart.price = parseFloat(product.price); delete productForCart.selectedDurationLabel; } delete productForCart.currentSelectedPrice; cart = [{ ...productForCart, quantity: 1 }]; updateCart(); navigateTo('checkout', null, null, true); } }
         
         function updateCheckoutPageOrderSummary() {
-            const orderItemsElement = domElements.orderItemsCheckout; const orderTotalElement = domElements.orderTotalCheckout; const submitButton = domElements.checkoutForm ? domElements.checkoutForm.querySelector('.submit-btn') : null;
+            const orderItemsElement = domElements.orderItemsCheckout;
+            const orderTotalElement = domElements.orderTotalCheckout;
+            const submitButton = domElements.checkoutForm ? domElements.checkoutForm.querySelector('.submit-btn') : null;
+
+            const subtotalRow = document.getElementById('subtotal-row');
+            const discountRow = document.getElementById('discount-row');
+            const orderSubtotalCheckout = document.getElementById('orderSubtotalCheckout');
+            const orderDiscountCheckout = document.getElementById('orderDiscountCheckout');
+
             if (!orderItemsElement || !orderTotalElement) return;
-            orderItemsElement.innerHTML = ''; let total = 0;
-            if (cart.length === 0) { orderItemsElement.innerHTML = "<p>Your cart is empty.</p>"; orderTotalElement.textContent = `৳0.00`; if (submitButton) submitButton.disabled = true; return; }
+
+            orderItemsElement.innerHTML = '';
+            let subtotal = 0;
+
+            if (cart.length === 0) {
+                orderItemsElement.innerHTML = "<p>Your cart is empty.</p>";
+                orderTotalElement.textContent = `৳0.00`;
+                if (submitButton) submitButton.disabled = true;
+                subtotalRow.style.display = 'none';
+                discountRow.style.display = 'none';
+                appliedCoupon = null; // Clear coupon if cart is empty
+                return;
+            }
+
             if (submitButton) submitButton.disabled = false;
-            cart.forEach(item => { const itemDiv = document.createElement('div'); itemDiv.className = 'summary-item'; const itemTotal = parseFloat(item.price) * (item.quantity || 1); const displayName = item.selectedDurationLabel ? `${item.name} (${item.selectedDurationLabel})` : item.name; itemDiv.innerHTML = `<span>${displayName} (x${item.quantity || 1})</span><span>৳${itemTotal.toFixed(2)}</span>`; orderItemsElement.appendChild(itemDiv); total += itemTotal; });
+
+            cart.forEach(item => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'summary-item';
+                const itemTotal = parseFloat(item.price) * (item.quantity || 1);
+                const displayName = item.selectedDurationLabel ? `${item.name} (${item.selectedDurationLabel})` : item.name;
+                itemDiv.innerHTML = `<span>${displayName} (x${item.quantity || 1})</span><span>৳${itemTotal.toFixed(2)}</span>`;
+                orderItemsElement.appendChild(itemDiv);
+                subtotal += itemTotal;
+            });
+
+            let total = subtotal;
+            let discountAmount = 0;
+
+            if (appliedCoupon) {
+                if (appliedCoupon.discount_type === 'percentage') {
+                    discountAmount = (subtotal * appliedCoupon.discount_value) / 100;
+                } else { // fixed
+                    discountAmount = appliedCoupon.discount_value;
+                }
+                total = subtotal - discountAmount;
+                if (total < 0) total = 0;
+
+                orderSubtotalCheckout.textContent = `৳${subtotal.toFixed(2)}`;
+                orderDiscountCheckout.textContent = `- ৳${discountAmount.toFixed(2)}`;
+                subtotalRow.style.display = 'flex';
+                discountRow.style.display = 'flex';
+            } else {
+                subtotalRow.style.display = 'none';
+                discountRow.style.display = 'none';
+            }
+
             orderTotalElement.textContent = `৳${total.toFixed(2)}`;
-            document.querySelectorAll('#payment-instructions .dynamic-amount').forEach(span => { span.textContent = `৳${total.toFixed(2)}`; });
+            document.querySelectorAll('#payment-instructions .dynamic-amount').forEach(span => {
+                span.textContent = `৳${total.toFixed(2)}`;
+            });
         }
+
+        async function applyCoupon() {
+            const couponInput = document.getElementById('coupon');
+            const couponCode = couponInput.value.trim();
+            if (!couponCode) {
+                showToast('Please enter a coupon code.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('api/apply_coupon.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ coupon_code: couponCode })
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    appliedCoupon = result;
+                    showToast(result.message, 'success');
+                    updateCheckoutPageOrderSummary();
+                    couponInput.disabled = true;
+                    document.querySelector('.apply-coupon-btn').disabled = true;
+                } else {
+                    showToast(result.message, 'error');
+                    appliedCoupon = null;
+                    updateCheckoutPageOrderSummary();
+                }
+            } catch (error) {
+                showToast('An error occurred while applying the coupon.', 'error');
+            }
+        }
+
         function updateOrderConfirmationMessage(orderId) { const orderIdDisplayElement = document.getElementById('orderIdDisplay'); if (orderIdDisplayElement) { orderIdDisplayElement.textContent = orderId; } }
         async function placeOrder() {
             const form = domElements.checkoutForm; if (!form) { showToast('Checkout form unavailable.', 'error'); return; }
@@ -3584,15 +3685,53 @@ function toggleSeeMore(btn, seeLess) {
             if (cart.length === 0) { showToast('Cart is empty.', 'error'); navigateTo('products', 'all'); return; }
             const selectedPaymentMethodRadio = form.querySelector('input[name="paymentMethod"]:checked'); if (!selectedPaymentMethodRadio) { showToast('Select payment method.', 'error'); const paymentTrigger = document.querySelector('.custom-select-trigger'); if (paymentTrigger) paymentTrigger.focus(); return; }
             const paymentMethod = selectedPaymentMethodRadio.value; const orderId = 'TPBD-' + Math.floor(100000 + Math.random() * 900000);
-            const orderPayload = { id: orderId, customer: { name: name, email: email, phone: phone, address: 'N/A' }, items: JSON.parse(JSON.stringify(cart.map(item => ({ id: item.id, name: item.name, price: parseFloat(item.price), quantity: item.quantity || 1, selectedDurationLabel: item.selectedDurationLabel || null })))), totalAmount: cart.reduce((sum, item) => sum + (parseFloat(item.price) * (item.quantity || 1)), 0), paymentMethod: paymentMethod, status: 'Pending', timestamp: new Date().toISOString(), transactionId: transactionId, viewed: false };
+
+            let subtotal = cart.reduce((sum, item) => sum + (parseFloat(item.price) * (item.quantity || 1)), 0);
+            let totalAmount = subtotal;
+            let discountAmount = 0;
+            if(appliedCoupon) {
+                if (appliedCoupon.discount_type === 'percentage') {
+                    discountAmount = (subtotal * appliedCoupon.discount_value) / 100;
+                } else { // fixed
+                    discountAmount = appliedCoupon.discount_value;
+                }
+                totalAmount = subtotal - discountAmount;
+                if (totalAmount < 0) totalAmount = 0;
+            }
+
+            const orderPayload = {
+                id: orderId,
+                customer: { name: name, email: email, phone: phone, address: 'N/A' },
+                items: JSON.parse(JSON.stringify(cart.map(item => ({ id: item.id, name: item.name, price: parseFloat(item.price), quantity: item.quantity || 1, selectedDurationLabel: item.selectedDurationLabel || null })))),
+                subtotal: subtotal,
+                discount: discountAmount,
+                coupon_code: appliedCoupon ? appliedCoupon.code : null,
+                totalAmount: totalAmount,
+                paymentMethod: paymentMethod,
+                status: 'Pending',
+                timestamp: new Date().toISOString(),
+                transactionId: transactionId,
+                viewed: false
+            };
+
             showToast('Submitting order...', 'info', 7000);
             try {
-                const response = await fetch('save_order.php', { method: 'POST', headers: { 'Content-Type': 'application/json', }, body: JSON.stringify(orderPayload), });
+                const response = await fetch('api/save_order.php', { method: 'POST', headers: { 'Content-Type': 'application/json', }, body: JSON.stringify(orderPayload), });
                 const result = await response.json(); const finalOrderId = result.orderId || orderId;
                 if (response.ok && result.success) { showToast(`Order ${finalOrderId} saved!`, 'success'); console.log('Order Placed (server & local):', finalOrderId); loadOrdersFromLocalStorage(); orders.unshift({ ...orderPayload, id: finalOrderId }); saveOrdersToLocalStorage(); updateOrderConfirmationMessage(finalOrderId); navigateTo('orderConfirmation'); }
                 else { showToast(`Order ${orderId} saved locally. Server: ${result.message || 'error'}`, 'error critical'); console.error('Server save fail:', result.message); loadOrdersFromLocalStorage(); orders.unshift(orderPayload); saveOrdersToLocalStorage(); updateOrderConfirmationMessage(orderId); navigateTo('orderConfirmation'); }
             } catch (error) { showToast(`Order ${orderId} saved locally. Network error.`, 'error critical'); console.error('Network/server error:', error); loadOrdersFromLocalStorage(); orders.unshift(orderPayload); saveOrdersToLocalStorage(); updateOrderConfirmationMessage(orderId); navigateTo('orderConfirmation'); }
-            finally { if (typeof form.reset === 'function') form.reset(); const selectedPaymentText = document.getElementById('selected-payment-method-text'); if(selectedPaymentText) { selectedPaymentText.textContent = "Select payment gateway"; selectedPaymentText.classList.remove('selected'); } const paymentDetailsArea = document.getElementById('payment-details-area'); if(paymentDetailsArea) paymentDetailsArea.style.display = 'none'; document.querySelectorAll('.custom-option.selected-option-highlight').forEach(opt => opt.classList.remove('selected-option-highlight')); cart = []; updateCart(); }
+            finally {
+                if (typeof form.reset === 'function') form.reset();
+                const selectedPaymentText = document.getElementById('selected-payment-method-text');
+                if(selectedPaymentText) { selectedPaymentText.textContent = "Select payment gateway"; selectedPaymentText.classList.remove('selected'); }
+                const paymentDetailsArea = document.getElementById('payment-details-area');
+                if(paymentDetailsArea) paymentDetailsArea.style.display = 'none';
+                document.querySelectorAll('.custom-option.selected-option-highlight').forEach(opt => opt.classList.remove('selected-option-highlight'));
+                cart = [];
+                appliedCoupon = null;
+                updateCart();
+            }
         }
 
         async function displayOrdersPage() {
